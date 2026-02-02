@@ -1,0 +1,45 @@
+{
+  "name": "flutter-clean-arch-skills",
+  "description": "Flutter Clean Architecture skills for Claude Code: development patterns, code review, testing, and pipeline orchestration with BLoC state management",
+  "version": "1.0.0",
+  "author": {
+    "name": "aleksandr"
+  },
+  "keywords": [
+    "flutter",
+    "dart",
+    "clean-architecture",
+    "bloc",
+    "freezed",
+    "code-review",
+    "testing",
+    "mocktail"
+  ],
+  "skills": [
+    {
+      "name": "flutter-dev",
+      "description": "Flutter development with Clean Architecture and BLoC patterns"
+    },
+    {
+      "name": "flutter-reviewer",
+      "description": "Code review checklist for Flutter Clean Architecture projects"
+    },
+    {
+      "name": "flutter-tester",
+      "description": "Testing patterns with mocktail and bloc_test"
+    },
+    {
+      "name": "orchestrator",
+      "description": "Development pipeline: dev → review → test → iterate"
+    },
+    {
+      "name": "orchestrator-agents",
+      "description": "Multi-agent orchestrator with Task tool subagents"
+    }
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/USERNAME/flutter-clean-arch-skills"
+  },
+  "license": "MIT"
+}
