@@ -1,142 +1,266 @@
 # Flutter Clean Architecture Skills
 
-Claude Code skills for Flutter projects with Clean Architecture, BLoC state management, and @freezed patterns.
+Complete development pipeline for **Flutter projects** with Clean Architecture and BLoC state management.
 
-## Skills Included
+One orchestrator accepts a task and coordinates the **full pipeline** through isolated sub-agents.
+**QE verification** via Maestro E2E tests. **Asana** integration for task management.
 
-| Skill | Description |
-|-------|-------------|
-| **flutter-dev** | Development patterns: Clean Architecture layers, BLoC with @freezed, Either error handling |
-| **flutter-reviewer** | Code review checklist: architecture compliance, type safety, performance |
-| **flutter-tester** | Testing with mocktail and bloc_test, >80% coverage target |
-| **orchestrator** | Pipeline automation: dev → review → test → iterate |
-| **orchestrator-agents** | Multi-agent version with parallel subagents |
+---
 
-## Installation
+## Architecture v3 (Skills + Agents + Hooks + QE)
 
-### Option 1: Copy to project
+```
++-----------------------------------------------------------------------+
+|  User: /orchestrator                                                    |
+|              |                                                          |
+|              v                                                          |
+|  +----------------------------------+                                   |
+|  |  orchestrator (Skill)            | <- Single user-invocable skill    |
+|  |  Coordinates entire pipeline     |                                   |
+|  +----------------+-----------------+                                   |
+|                   | Task(subagent_type="...")                            |
+|    +--------------+-----------------------------+                       |
+|    v              v              v               v                      |
+|  +--------+  +----------+  +----------+  +-------------+               |
+|  |   PM   |  | Flutter  |  | Flutter  |  |   Maestro   |               |
+|  |  agent  |  |   dev    |  | reviewer |  |   QE E2E    |               |
+|  +----+---+  +----+-----+  +----+-----+  +------+------+               |
+|       |           |              |               |                      |
+|  flutter-pm  flutter-dev  flutter-reviewer  maestro-tester              |
+|  (Asana)     flutter-tester                                             |
+|                                                                         |
+|  Knowledge Skills (preloaded into agents):                              |
+|  flutter-guide | maestro-flutter                                        |
+|                                                                         |
+|  Hooks: Telegram notifications                                          |
+|  (permission_prompt, task complete, agent complete)                      |
++-----------------------------------------------------------------------+
+```
+
+---
+
+## Quick Start
+
+### Installation
 
 ```bash
-# Clone
-git clone https://github.com/USERNAME/flutter-clean-arch-skills.git
+cd your-project
+./path/to/flutter-clean-arch-skills/install.sh
 
-# Copy skills to your project
-cp -r flutter-clean-arch-skills/skills/* your-project/.claude/skills/
+# Or manually:
+cp -r skills/* .claude/skills/
+cp -r agents/* .claude/agents/
+cp -r hooks/* .claude/hooks/
+cp settings-hooks.json .claude/settings.json
 ```
 
-### Option 2: Personal skills (all projects)
+### Usage
 
+```
+/orchestrator
+
+Task: Create user profile screen with edit functionality
+- Display user info
+- Edit name and avatar
+- Save to server
+```
+
+### With Asana Tasks
+
+```
+/orchestrator
+
+Tasks from Asana:
+- https://app.asana.com/0/PROJECT/TASK_1
+- https://app.asana.com/0/PROJECT/TASK_2
+```
+
+**Orchestrator automatically:**
+1. PM parses input, checks registry, plans test cases
+2. flutter-dev implements features (Clean Architecture + BLoC)
+3. flutter-reviewer reviews and fixes code
+4. flutter-tester writes unit/widget/flow tests (80%+ coverage)
+5. **maestro-tester** -- QE E2E verification via Maestro on emulator
+6. Updates registry, generates final report
+
+---
+
+## Package Structure
+
+```
+flutter-clean-arch-skills/
+├── skills/                          # 3 skills
+│   ├── orchestrator/                # User-invocable (/orchestrator)
+│   │   └── SKILL.md
+│   ├── flutter-guide/               # Knowledge base (NOT user-invocable)
+│   │   ├── SKILL.md
+│   │   └── references/ (6 files)
+│   └── maestro-flutter/             # QE knowledge base
+│       ├── SKILL.md
+│       └── references/ (2 files)
+├── agents/                          # 5 agents
+│   ├── flutter-pm.md               # PM (model: inherit, Asana + test cases)
+│   ├── flutter-dev.md              # Flutter dev (model: sonnet)
+│   ├── flutter-reviewer.md         # Flutter review (model: haiku)
+│   ├── flutter-tester.md           # Flutter tests (model: sonnet)
+│   └── maestro-tester.md           # QE E2E (model: sonnet, Maestro MCP)
+├── hooks/
+│   └── telegram-notify.sh          # Telegram notifications
+├── settings-hooks.json             # Hook config
+├── install.sh                      # Auto-installation
+├── marketplace.json
+└── README.md
+```
+
+---
+
+## Skills vs Agents
+
+| Aspect | Skills | Agents |
+|--------|--------|--------|
+| Context | Shared with main | Isolated |
+| Tools | Inherited | Own set |
+| Model | Current | Configurable (sonnet/haiku) |
+| Invocation | `/orchestrator` | `Task(subagent_type="agent-name")` |
+| Knowledge skills | `user-invocable: false` | Preloaded via `skills:` |
+
+### Model Assignments
+
+| Agent | Model | Reason |
+|-------|-------|--------|
+| flutter-pm | inherit | Full reasoning for decomposition + Asana parsing |
+| flutter-dev | sonnet | Quality code generation |
+| flutter-reviewer | haiku | Fast pattern matching |
+| flutter-tester | sonnet | Quality test generation |
+| maestro-tester | sonnet | QE E2E: flow generation + result analysis |
+
+---
+
+## Pipeline Flow
+
+```
+PHASE 1: PM ANALYSIS
+    |  flutter-pm: Asana parsing -> registry lookup -> classify ->
+    |  decompose -> Maestro test cases
+    v
+PHASE 2: TODO CHECKLIST
+    |  Orchestrator creates TodoWrite from PM plan
+    v
+PHASE 3: EXECUTE (sequential agents)
+    |  flutter-dev -> domain -> data -> presentation
+    v
+PHASE 4: REVIEW (auto-fix)
+    |  flutter-reviewer: fix all issues, max 3 cycles
+    v
+PHASE 5: TESTS (MANDATORY -- unit/widget/flow)
+    |  flutter-tester: BLoC + widget + flow tests, 80%+ coverage
+    v
+PHASE 6: QE E2E (MANDATORY for UI tasks)
+    |  maestro-tester: TestKeys -> YAML flows -> build -> run on emulator
+    v
+PHASE 7: CLOSE
+    |  Update REGISTRY.md -> Final report
+    v
+COMPLETE
+```
+
+---
+
+## Stack
+
+| Technology | Purpose |
+|-----------|---------|
+| Flutter 3.x | UI framework |
+| flutter_bloc | State management (BLoC pattern) |
+| freezed | Immutable models, events, states |
+| Dio | HTTP client |
+| Dartz | Either error handling |
+| GetIt | Dependency injection |
+| mocktail | Test mocking |
+| bloc_test | BLoC testing |
+| Maestro | E2E testing |
+
+---
+
+## Quality Gates
+
+| Stage | Check | Criteria |
+|-------|-------|----------|
+| PM | Maestro Test Cases | >=3 TC for Flutter features |
+| DEVELOP | Build | `flutter build` succeeds |
+| DEVELOP | Analyze | `flutter analyze` zero issues |
+| REVIEW | Critical | Zero [CRITICAL] issues |
+| TEST | Pass | All tests pass |
+| TEST | Coverage | >=80% on new code |
+| **QE** | **maestro test** | **All TC PASS** |
+
+---
+
+## Testing Pyramid
+
+```
+          +-------------------+
+          |     Maestro       |  10% -- E2E user journeys
+          |    (QE Phase 6)   |  Real emulator/device
+          +--------+----------+
+                   |
+        +----------+----------+
+        |  Widget + Flow Tests |  20% -- UI + state management
+        |    (Phase 5)         |  flutter-tester
+        +----------+----------+
+                   |
+  +----------------+----------------+
+  |           Unit Tests             |  70% -- Business logic
+  |  flutter-tester: BLoC, UseCases  |  mocktail, bloc_test
+  +----------------------------------+
+```
+
+---
+
+## Telegram Hooks
+
+Automatic Telegram notifications:
+- **Permission prompt** -- when Claude waits for confirmation
+- **Task complete** -- when main task is done
+- **Agent complete** -- when a sub-agent finishes
+
+Setup (env vars):
 ```bash
-cp -r flutter-clean-arch-skills/skills/* ~/.claude/skills/
+export TELEGRAM_BOT_TOKEN="your-token"
+export TELEGRAM_CHAT_ID="your-chat-id"
 ```
 
-## Usage
+---
 
-Skills activate automatically or via triggers:
+## Examples
 
+### Full feature
 ```
-# Development (auto-activates when editing lib/)
-"Create user profile feature"
-
-# Review
-"Review my code" or "/flutter-reviewer"
-
-# Testing
-"Write tests" or "/flutter-tester"
-
-# Full pipeline
-"Execute task-1.md" or "/orchestrator"
+/orchestrator
+Create user profile screen with edit functionality
 ```
 
-## Architecture Overview
-
+### Asana task
 ```
-lib/
-├── core/           # Shared utilities, errors, DI
-├── data/           # API, repositories, models
-├── domain/         # Entities, use cases (business logic)
-├── presentation/   # Features, BLoCs, UI
-└── resources/      # Colors, styles, localization
+/orchestrator
+https://app.asana.com/0/1234567890/9876543210
 ```
 
-## Key Patterns Enforced
-
-### Type Safety
-```dart
-// FORBIDDEN
-Map<String, dynamic> data;
-
-// REQUIRED
-@freezed
-class UserEntity with _$UserEntity {
-  const factory UserEntity({
-    required String id,
-    required String name,
-  }) = _UserEntity;
-}
+### Bug fix
+```
+/orchestrator
+BLoC does not update list after deleting an item
 ```
 
-### BLoC Events & States
-```dart
-// REQUIRED - @freezed
-@freezed
-class UserEvent with _$UserEvent {
-  const factory UserEvent.load(String id) = _Load;
-}
-
-@freezed
-class UserState with _$UserState {
-  const factory UserState.initial() = _Initial;
-  const factory UserState.loading() = _Loading;
-  const factory UserState.loaded(UserEntity user) = _Loaded;
-  const factory UserState.error(AppError error) = _Error;
-}
+### Multiple Asana tasks
+```
+/orchestrator
+Tasks:
+- https://app.asana.com/0/PROJECT/TASK_1
+- https://app.asana.com/0/PROJECT/TASK_2
 ```
 
-### Error Handling
-```dart
-// REQUIRED - Either<AppError, T>
-Future<Either<AppError, User>> getUser(String id);
-
-// Usage in BLoC
-result.fold(
-  (error) => emit(UserState.error(error)),
-  (user) => emit(UserState.loaded(user)),
-);
-```
-
-## Orchestrator Pipeline
-
-```
-┌─────────────────────────────────────────┐
-│  1. PARSE    - Read task file           │
-│  2. PLAN     - Break into subtasks      │
-│  3. DEVELOP  - Implement (flutter-dev)  │
-│  4. REVIEW   - Validate (flutter-review)│
-│  5. TEST     - Cover (flutter-tester)   │
-│  6. ITERATE  - Fix issues, repeat 4-5   │
-│  7. COMPLETE - All checks pass          │
-└─────────────────────────────────────────┘
-```
-
-## Task File Format
-
-Create `task-*.md` files for orchestrator:
-
-```markdown
-# Task: Feature Name
-
-## Description
-What needs to be implemented.
-
-## Requirements
-- Requirement 1
-- Requirement 2
-
-## Acceptance Criteria
-- [ ] Criteria 1
-- [ ] Criteria 2
-```
+---
 
 ## License
 

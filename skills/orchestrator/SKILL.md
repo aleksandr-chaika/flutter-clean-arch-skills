@@ -1,245 +1,337 @@
 ---
 name: orchestrator
 description: |
-  Development pipeline orchestrator for Flutter projects.
-
-  ACTIVATION: Use this skill when user says "execute task", "исполни задачу", "implement feature", "реализуй фичу", or references a task-*.md file.
-
-  USE CASES: Orchestrating full development cycle from task file to tested, reviewed code. Manages pipeline: development → review → testing → iteration.
+  FULLY AUTONOMOUS Flutter development pipeline orchestrator.
+  Smart routing: PM analyzes -> creates targeted tasks -> Orchestrator executes only needed agents.
+  Supports Asana task URLs. Includes QE verification via Maestro E2E tests.
+  7-phase flow: PM -> TodoWrite -> Execute -> Review -> Tests -> QE E2E -> Close.
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash, Task, TodoWrite, AskUserQuestion
 ---
 
-# Development Orchestrator
+# Flutter Autonomous Development Orchestrator
 
-## Overview
+## CRITICAL: MANDATORY EXECUTION RULES
 
-Orchestrates the full development pipeline for Flutter features. Reads task specifications, implements code, reviews, tests, and iterates until quality standards are met.
+**Orchestrator MUST execute ALL phases from PM plan. Skipping phases is FORBIDDEN.**
 
-## Pipeline Stages
+1. **DO NOT ASK** for confirmation to proceed
+2. **DO NOT ASK** for permission to create/edit files
+3. **EXECUTE** the pipeline automatically --- ALL STAGES are MANDATORY
+4. **ONLY STOP** if blocked by missing critical information
+5. **NEVER SKIP** review, tests, or QE verification
+
+---
+
+## CORE FLOW
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    ORCHESTRATOR PIPELINE                        │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  1. PARSE      Read task-*.md, extract requirements             │
-│       ↓                                                         │
-│  2. PLAN       Break into subtasks, identify affected files     │
-│       ↓                                                         │
-│  3. DEVELOP    Implement using flutter-dev patterns             │
-│       ↓                                                         │
-│  4. REVIEW     Validate using flutter-reviewer checklist        │
-│       ↓                                                         │
-│  5. TEST       Write tests using flutter-tester patterns        │
-│       ↓                                                         │
-│  6. ITERATE    Fix issues from review/tests, repeat 4-5         │
-│       ↓                                                         │
-│  7. COMPLETE   All checks pass, summarize changes               │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+USER REQUEST -> PHASE 1: PM -> PHASE 2: TodoWrite -> PHASE 3: Execute ->
+-> PHASE 4: Review -> PHASE 5: Tests -> PHASE 6: QE E2E -> PHASE 7: Close & Registry
 ```
 
-## Execution Protocol
+---
 
-### Stage 1: PARSE
+## PIPELINE STATUS TRACKING
+
+**BEFORE each agent call**, update `.tasks/.pipeline-status` file via Bash:
+
+```bash
+mkdir -p .tasks
+cat > .tasks/.pipeline-status << 'PSTATUS'
+REQUEST=краткое описание запроса
+PHASE=текущая фаза (PM|Execute|Review|Tests|QE|Close)
+CURRENT_TASK=TASK-XXX
+CURRENT_DESC=краткое описание задачи
+CURRENT_AGENT=имя агента
+PSTATUS
+```
+
+This file is read by Telegram notification hooks to provide context in messages.
+
+**Update this file EVERY TIME before invoking a new agent.**
+
+---
+
+## PHASE 1: PM ANALYSIS (ALWAYS FIRST)
+
+Update pipeline status:
+```bash
+cat > .tasks/.pipeline-status << 'PSTATUS'
+REQUEST=[user request summary]
+PHASE=PM
+CURRENT_TASK=
+CURRENT_DESC=Анализ и декомпозиция задачи
+CURRENT_AGENT=flutter-pm
+PSTATUS
+```
+
+Invoke PM agent:
+```
+Task(subagent_type="flutter-pm", prompt="[user request + context]")
+```
+
+PM accepts:
+- **Plain text** requirements
+- **Asana task URLs** (PM uses Asana MCP to read them)
+- **Multiple tasks** (PM groups them into execution plan)
+
+PM returns:
+- Registry lookup result (similar past tasks)
+- Task type (bug/feature/fix/refactor)
+- Numbered tasks with execution order
+- Required reviews and tests
+- **Maestro test cases** (for Flutter UI tasks)
+
+### If PM found similar past task:
+Show to user: "Found similar task TASK-XXX. It was resolved by [resolution]."
+
+---
+
+## PHASE 2: BUILD TODOWRITE FROM PM PLAN
+
+Create TodoWrite checklist based on PM's plan (NOT a fixed template).
+
+### Example for FEATURE:
+```
+TodoWrite([
+  { content: "PM Analysis", status: "completed" },
+  { content: "Dev: flutter-dev -> TASK-050 (domain)", status: "pending" },
+  { content: "Dev: flutter-dev -> TASK-051 (data)", status: "pending" },
+  { content: "Dev: flutter-dev -> TASK-052 (presentation)", status: "pending" },
+  { content: "Review: flutter-reviewer -> all changes", status: "pending" },
+  { content: "Tests: flutter-tester -> full coverage", status: "pending" },
+  { content: "QE: maestro-tester -> E2E verify", status: "pending" },
+  { content: "Close: registry + report", status: "pending" }
+])
+```
+
+Only include stages that PM specified.
+
+---
+
+## PHASE 3: EXECUTE TASKS
+
+For each task in PM's execution order:
+
+1. TodoWrite: mark task `in_progress`
+2. **Update pipeline status** (`.tasks/.pipeline-status`) with current TASK-ID, description, agent
+3. Read task file from `.tasks/flutter/`
+4. **Invoke agent via Task tool:**
+
+```
+Task(subagent_type="flutter-dev", prompt="Read and implement: .tasks/flutter/TASK-050-domain.md\n\n[task file content]")
+```
+
+5. **Collect agent result** --- save status (SUCCESS/FAILURE), files changed, errors encountered
+6. Verify agent output (files exist, no errors)
+7. TodoWrite: mark task `completed`
+
+---
+
+## PHASE 4: REVIEW (after dev tasks)
+
+Update pipeline status, then invoke:
+
+```
+Task(subagent_type="flutter-reviewer", prompt="Review all Flutter changes for [task description]. Fix issues found.\n\nFiles changed:\n[file list]")
+```
+
+Reviewer FIXES issues, not just reports them.
+Max 3 review-fix cycles.
+**Collect**: issues found count, issues fixed count.
+
+---
+
+## PHASE 5: TESTS --- MANDATORY
+
+```
+TESTS MANDATORY FOR ALL TASK TYPES. SKIPPING FORBIDDEN.
+```
+
+| Task Type | Test Scope |
+|-----------|-----------|
+| `feature` | Full: unit + BLoC + widget + flow tests |
+| `bug` | Regression test reproducing and verifying the fix |
+| `fix` | Unit test covering the changed behavior |
+| `refactor` | Tests verifying no behavior change |
+
+Update pipeline status, then invoke:
+
+```
+Task(subagent_type="flutter-tester", prompt="Write tests for [task description]. Include flow tests for CRUD.\n\nTest scenarios from PM:\n[test scenarios]\n\nSource files:\n[file list]")
+```
+
+If tests fail -> fix and re-run (max 3 cycles).
+**Collect**: test count, pass/fail, coverage %.
+
+---
+
+## PHASE 6: QE E2E VERIFICATION --- MANDATORY
+
+```
+QE MANDATORY FOR ALL FLUTTER UI TASKS. SKIPPING FORBIDDEN.
+```
+
+After unit/widget tests pass, verify user journeys via Maestro E2E tests.
+
+Update pipeline status, then invoke:
+
+```
+Task(subagent_type="maestro-tester", prompt="QE E2E verification.\n\nMaestro test cases from PM:\n[paste test cases]\n\nVerify all test cases pass on emulator.")
+```
+
+### If QE tests fail:
+1. UI bug -> send back to flutter-dev for fix
+2. Test issue -> maestro-tester self-fixes (up to 2 retries)
+3. Still failing -> report in final summary as PARTIAL
+
+### Skip QE if:
+- PM explicitly marks task as "no UI changes"
+- Task is pure domain/data refactor with no presentation changes
+
+---
+
+## PHASE 7: CLOSE & UPDATE REGISTRY
+
+1. Verify all PM tasks completed
+2. Update `.tasks/REGISTRY.md`: status `open` -> `done`, fill Resolution column
+3. Update pipeline status: `PHASE=Close`
+4. **Output final summary in Russian** (MANDATORY FORMAT below)
+
+### MANDATORY FINAL OUTPUT FORMAT (Russian)
 
 ```markdown
-## Parsing Task: [filename]
+## Задача выполнена
 
-**Requirements extracted:**
-- [ ] Requirement 1
-- [ ] Requirement 2
+### Запрос
+[оригинальный запрос пользователя]
 
-**Acceptance criteria:**
-- [ ] Criteria 1
-- [ ] Criteria 2
+### Источник
+[Asana URL / прямой запрос]
 
-**Dependencies identified:**
-- Existing code: [files]
-- New code needed: [files]
+### Тип
+[bug | feature | fix | refactor]
+
+---
+
+### Реестр задач
+- Созданные задачи: TASK-050, TASK-051, TASK-052
+- Похожие задачи в истории: [TASK-XXX / не найдено]
+- **Статус реестра: ОБНОВЛЁН** (все задачи закрыты)
+
+---
+
+### Выполненная работа
+
+| # | Задача | Агент | Статус | Что сделано |
+|---|--------|-------|--------|-------------|
+| 1 | TASK-050 | flutter-dev | ВЫПОЛНЕНО | Создан домен: entities, use cases |
+| 2 | TASK-051 | flutter-dev | ВЫПОЛНЕНО | Создан data layer: repo, API |
+| 3 | TASK-052 | flutter-dev | ВЫПОЛНЕНО | Создан UI: BLoC, экраны, виджеты |
+
+---
+
+### Код-ревью
+
+| Ревьюер | Статус | Найдено проблем | Исправлено |
+|---------|--------|----------------|------------|
+| flutter-reviewer | ВЫПОЛНЕНО | 3 | 3 |
+
+---
+
+### Тестирование
+
+| Тестер | Статус | Кол-во тестов | Покрытие | Результат |
+|--------|--------|--------------|----------|-----------|
+| flutter-tester | ВЫПОЛНЕНО | 18 | 85% | ВСЕ ПРОЙДЕНЫ |
+
+---
+
+### QE E2E (Maestro)
+
+| Статус | Всего TC | Пройдено | Провалено |
+|--------|----------|----------|-----------|
+| ВЫПОЛНЕНО | 5 | 5 | 0 |
+
+---
+
+### Ошибки и проблемы
+
+- [Список ошибок, которые возникли в процессе работы]
+- [Как каждая ошибка была решена]
+- [Если ошибок не было: "Ошибок не обнаружено"]
+
+---
+
+### Изменённые файлы
+
+| Файл | Действие | Описание |
+|------|----------|----------|
+| lib/features/auth/domain/ | создан | Entities, use cases |
+| lib/features/auth/data/ | создан | Repository, API models |
+| lib/features/auth/presentation/ | создан | BLoC, экраны |
+| test/features/auth/ | создан | 18 тестов |
+
+---
+
+### Итог
+- Все задачи: ВЫПОЛНЕНЫ / ЧАСТИЧНО / С ОШИБКАМИ
+- Реестр: ОБНОВЛЁН
+- Тесты: ПРОЙДЕНЫ
+- QE E2E: ПРОЙДЕНЫ / Н/Д
 ```
 
-### Stage 2: PLAN
+**IMPORTANT**: Fill in ACTUAL data from each agent's results, not placeholders.
+All text MUST be in Russian. Use data collected during phases 3-6.
 
-Use TodoWrite to create task breakdown:
+---
 
-```markdown
-## Implementation Plan
+## SMART ROUTING EXAMPLES
 
-### Files to create:
-1. lib/domain/entity/feature_entity.dart
-2. lib/domain/usecases/feature_usecase.dart
-3. lib/data/repository/feature_repository_impl.dart
-4. lib/presentation/feature/bloc.dart
-5. lib/presentation/feature/events.dart
-6. lib/presentation/feature/states.dart
-7. lib/presentation/feature/view/feature_page.dart
+**Bug**: PM -> flutter-dev (fix) -> flutter-reviewer -> flutter-tester -> maestro-tester -> registry
+**Feature**: PM -> flutter-dev (domain) -> flutter-dev (data) -> flutter-dev (UI) -> flutter-reviewer -> flutter-tester -> maestro-tester -> registry
+**Fix**: PM -> flutter-dev (fix) -> flutter-reviewer -> flutter-tester -> maestro-tester -> registry
+**Refactor (no UI)**: PM -> flutter-dev -> flutter-reviewer -> flutter-tester -> registry (no QE)
 
-### Files to modify:
-1. lib/core/di/injection.dart - register dependencies
-```
+---
 
-### Stage 3: DEVELOP
+## Autonomy Rules
 
-Switch to **flutter-dev** mode:
+### DO Automatically:
+- Start with PM (registry lookup + task classification)
+- Parse Asana URLs via PM
+- Build TodoWrite from PM's plan
+- Execute only agents PM specified
+- **Update `.tasks/.pipeline-status` before EVERY agent call**
+- Run reviews after dev work
+- Run tests ALWAYS
+- Run QE E2E when Flutter UI tasks exist
+- Update registry after completion
+- **Output final summary in Russian**
 
-1. Create files following Clean Architecture order:
-   - Domain entities first
-   - Domain use cases
-   - Data repositories
-   - Presentation BLoC
-   - UI components
+### ONLY Ask If:
+- PM flagged ambiguity
+- Critical security decision
+- Conflicting requirements
+- Asana task has no description
 
-2. Apply all flutter-dev rules:
-   - @freezed for events/states
-   - Either<AppError, T> for errors
-   - Type-safe models
-   - AppColors, AppTextStyles, AppLocalization
+### NEVER Skip:
+- PM analysis phase
+- Registry lookup
+- Pipeline status updates
+- Code review after development
+- Tests after development
+- QE E2E after Flutter UI development
+- Registry update after completion
+- **Russian final summary output**
 
-3. Run build_runner after @freezed changes:
-   ```bash
-   flutter pub run build_runner build --delete-conflicting-outputs
-   ```
-
-### Stage 4: REVIEW
-
-Switch to **flutter-reviewer** mode:
-
-Perform self-review checklist:
-
-```markdown
-## Self-Review
-
-### Architecture Compliance
-- [ ] Files in correct layers
-- [ ] Dependencies point inward
-- [ ] No cross-feature dependencies
-
-### Type Safety
-- [ ] No Map<String, dynamic>
-- [ ] No dynamic types
-- [ ] All events/states use @freezed
-
-### BLoC Patterns
-- [ ] Individual event handlers
-- [ ] Proper state emissions
-- [ ] Either error handling
-
-### UI Standards
-- [ ] AppColors used
-- [ ] AppTextStyles used
-- [ ] AppLocalization for strings
-- [ ] SVGImage() for SVGs
-
-### Issues Found:
-1. [CRITICAL] file:line - description
-2. [WARNING] file:line - description
-```
-
-**If issues found → Go to Stage 6 (ITERATE)**
-
-### Stage 5: TEST
-
-Switch to **flutter-tester** mode:
-
-1. Create test files mirroring source structure
-2. Write tests for:
-   - Use cases (unit tests)
-   - Repositories (unit tests)
-   - BLoCs (bloc_test)
-   - Key widgets (widget tests)
-
-3. Run tests:
-   ```bash
-   flutter test
-   ```
-
-4. Check coverage:
-   ```bash
-   flutter test --coverage
-   ```
-
-**If tests fail → Go to Stage 6 (ITERATE)**
-
-### Stage 6: ITERATE
-
-```markdown
-## Iteration [N]
-
-### Issues to fix:
-1. Review issue: [description] → [fix]
-2. Test failure: [description] → [fix]
-
-### Changes made:
-- file.dart: [what changed]
-```
-
-After fixes:
-- Re-run Stage 4 (REVIEW)
-- Re-run Stage 5 (TEST)
-- Repeat until all pass
-
-**Max iterations: 3** - if still failing, report to user with details.
-
-### Stage 7: COMPLETE
-
-```markdown
-## Task Complete ✓
-
-### Summary
-- Files created: [count]
-- Files modified: [count]
-- Tests written: [count]
-- Coverage: [X]%
-
-### Created Files:
-- lib/domain/entity/feature_entity.dart
-- lib/domain/usecases/feature_usecase.dart
-- ...
-
-### Modified Files:
-- lib/core/di/injection.dart
-
-### Test Results:
-All [N] tests passing
-
-### Next Steps (if any):
-- Manual testing recommended for: [areas]
-- Integration with: [other features]
-```
-
-## Task File Format
-
-Expected format for `task-*.md`:
-
-```markdown
-# Task: [Feature Name]
-
-## Description
-Brief description of what needs to be implemented.
-
-## Requirements
-- Requirement 1
-- Requirement 2
-
-## Acceptance Criteria
-- [ ] Criteria 1
-- [ ] Criteria 2
-
-## Technical Notes (optional)
-- API endpoint: /api/v1/feature
-- Design reference: [link]
-
-## Out of Scope
-- What NOT to implement
-```
+---
 
 ## Error Handling
 
 ### Build Errors
 ```bash
-# If build_runner fails
-flutter clean
-flutter pub get
+flutter clean && flutter pub get
 flutter pub run build_runner build --delete-conflicting-outputs
 ```
 
@@ -252,30 +344,24 @@ flutter pub run build_runner build --delete-conflicting-outputs
 ### Unresolvable Issues
 If stuck after 3 iterations:
 ```markdown
-## Blocked: [Issue]
+## Заблокировано: [Проблема]
 
-**Attempted fixes:**
-1. Fix 1 - result
-2. Fix 2 - result
-3. Fix 3 - result
+**Попытки исправления:**
+1. Попытка 1 --- результат
+2. Попытка 2 --- результат
+3. Попытка 3 --- результат
 
-**Needs user input:**
-- Question or decision needed
+**Требуется решение пользователя:**
+- Вопрос или решение
 ```
 
 ## Quality Gates
 
-Each stage has quality gates that must pass:
-
-| Stage | Gate | Criteria |
-|-------|------|----------|
+| Этап | Проверка | Критерий |
+|------|----------|----------|
 | DEVELOP | Build | `flutter build` succeeds |
 | REVIEW | Critical | Zero [CRITICAL] issues |
 | TEST | Pass | All tests pass |
 | TEST | Coverage | >80% on new code |
-
-## Related Skills
-
-- `flutter-dev` - Development patterns (Stage 3)
-- `flutter-reviewer` - Review checklist (Stage 4)
-- `flutter-tester` - Testing patterns (Stage 5)
+| QE E2E | Pass | All Maestro flows pass |
+| QE E2E | Screenshots | Screenshots captured at key points |

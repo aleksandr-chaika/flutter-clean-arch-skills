@@ -1,45 +1,75 @@
 {
   "name": "flutter-clean-arch-skills",
-  "description": "Flutter Clean Architecture skills for Claude Code: development patterns, code review, testing, and pipeline orchestration with BLoC state management",
-  "version": "1.0.0",
+  "version": "3.0.0",
+  "description": "Complete Flutter development pipeline — Clean Architecture + BLoC. One orchestrator coordinates all phases via isolated sub-agents. Maestro QE E2E testing. Asana task integration.",
   "author": {
     "name": "aleksandr"
   },
+  "license": "MIT",
   "keywords": [
-    "flutter",
-    "dart",
-    "clean-architecture",
-    "bloc",
+    "Flutter",
+    "Dart",
+    "Clean Architecture",
+    "BLoC",
     "freezed",
-    "code-review",
-    "testing",
-    "mocktail"
+    "Code Review",
+    "Testing",
+    "mocktail",
+    "bloc_test",
+    "Task Registry",
+    "Project Management",
+    "Maestro",
+    "E2E",
+    "Asana",
+    "Pipeline",
+    "Agents"
   ],
   "skills": [
     {
+      "name": "orchestrator",
+      "path": "skills/orchestrator",
+      "description": "Main coordinator — accepts task, invokes PM + dev/review/test/QE agents automatically"
+    },
+    {
+      "name": "flutter-guide",
+      "path": "skills/flutter-guide",
+      "description": "Flutter/BLoC Clean Architecture patterns, review and testing guides (preloaded into agents)"
+    },
+    {
+      "name": "maestro-flutter",
+      "path": "skills/maestro-flutter",
+      "description": "Maestro E2E testing patterns for Flutter — YAML flows, TestKeys, visual regression (preloaded into maestro-tester)"
+    }
+  ],
+  "agents": [
+    {
+      "name": "flutter-pm",
+      "path": "agents/flutter-pm.md",
+      "description": "Project Manager — registry lookup, task decomposition, Asana parsing, Maestro test case planning"
+    },
+    {
       "name": "flutter-dev",
-      "description": "Flutter development with Clean Architecture and BLoC patterns"
+      "path": "agents/flutter-dev.md",
+      "description": "Flutter developer — Clean Architecture + BLoC"
     },
     {
       "name": "flutter-reviewer",
-      "description": "Code review checklist for Flutter Clean Architecture projects"
+      "path": "agents/flutter-reviewer.md",
+      "description": "Flutter auto-fix code reviewer"
     },
     {
       "name": "flutter-tester",
-      "description": "Testing patterns with mocktail and bloc_test"
+      "path": "agents/flutter-tester.md",
+      "description": "Flutter tester — BLoC + widget + flow tests"
     },
     {
-      "name": "orchestrator",
-      "description": "Development pipeline: dev → review → test → iterate"
-    },
-    {
-      "name": "orchestrator-agents",
-      "description": "Multi-agent orchestrator with Task tool subagents"
+      "name": "maestro-tester",
+      "path": "agents/maestro-tester.md",
+      "description": "QE E2E tester — Maestro YAML flows, TestKeys audit, emulator verification"
     }
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/aleksandr-chaika/flutter-clean-arch-skills.git"
-  },
-  "license": "MIT"
+  }
 }
